@@ -7,4 +7,4 @@ python runanalysis.py
 
 This will run the tracker.py routine which iterates through clumpfind files and traces individual clumps through their evolution history.
 
-analyse.py will then analyse and plot clump properties and different stages of their evolution
+analyse.py will then analyse at plot clump properties and different stages of their evolution
