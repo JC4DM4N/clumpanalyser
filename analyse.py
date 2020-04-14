@@ -2,6 +2,7 @@
 Analyse and plot disc fragment properties.
 """
 import numpy as np
+from matplotlib import cm
 import matplotlib.pyplot as plt
 from libanalysis import PhantomAnalysis as pa
 
@@ -19,6 +20,7 @@ class Analyser():
 		self.wd = wd									#directory where data is stored
 		self.disc = pa('%s/%s' %(self.wd,self.file))
 		self.readClumpcat()								#read in clump info from clumpcat file
+		self.readMembers()
 		self.annulus = 3								#annulus in AU to analyse around clump centre
 
 		#define constants
@@ -27,7 +29,6 @@ class Analyser():
 		self.udist = self.disc.units['udist'] #cm
 		self.utime = self.disc.units['utime']
 		self.uenerg = self.umass*self.udist**2/self.utime**2
-
 
 	def readClumpcat(self):
 		'''
@@ -38,6 +39,21 @@ class Analyser():
 		for line in f.readlines()[1:]:
 			data.append(map(float, line.split()))
 		self.clumpcat = data
+
+        def readMembers(self):
+                """
+                Read in binary clumpmembers file from Clumpfind output.
+                """
+                f = open('%s/raw_clumpmembers_%s' %(self.wd,self.file), 'rb')
+                #Skip first and last entries from this array.
+                data = np.fromfile(f, dtype='i')[1:-1]
+                self.nclumps = max(data)
+                members = {}
+                # I think we don't want ID==0 as this refers to no clump (CHECK...)
+                for clump in range(self.nclumps):
+                        membershold = np.argwhere(data==clump+1).flatten()
+                        members[clump] = membershold
+                self.members = members
 
 	def azAverage(self,rads,vals,nbins=50):
 		'''
@@ -90,70 +106,83 @@ class Analyser():
 			thetas.append(np.array(theta))
 		return xs, thetas
 
-	def plotClump(self,ID):
+	@staticmethod
+	def writeClumpstoDumps(discs,IDs):
 		'''
-		Plot radial profiles of clump properties - single clump (dens, temp, dustfrac).
+		Write text file of particle properties within each clump
 		'''
-		clumpxyz = self.clumpcat[ID][:3]
-		r2 = (self.disc.xyzh[0]-clumpxyz[0])**2 + (self.disc.xyzh[1]-clumpxyz[1])**2
-		members = np.sqrt(r2) < self.annulus 			#members are all particles within radial annulus
+                timelegend = []
+                for i, [d, ID] in enumerate(zip(discs,IDs)):
+                        clumpxyz = d.clumpcat[ID][:3]
+                        r2 = (d.disc.xyzh[0]-clumpxyz[0])**2 + (d.disc.xyzh[1]-clumpxyz[1])**2
+                        members = np.sqrt(r2) < d.annulus                       #members are all particles within radial annulus
 
-		gas = self.disc.itype == 1
-		dust = self.disc.itype == 2
-		dustfrac = self.disc.dustfrac*1e8  #as I originally set dust-to-gas=1e-10
+                        gas = d.disc.itype == 1
+                        dust = d.disc.itype == 2
 
-		#Calculate temperatures from thermal energies
-		k = 1.38064852e-16    #ergs
-		mH = 1.6735575e-24    #grams
-		gmw = 2.381           #mean mass taken from Phantom
-		N = sum(gas*self.disc.massofgas)*self.umass/mH/gmw #number of atoms
-		temp = 2.*self.disc.utherm*self.uenerg/3./k/N
+                        dustfrac = d.disc.dustfrac*1e8  #as I originally set dust-to-gas=1e-10
 
-		radplot, densav = self.azAverage(np.sqrt(r2[members&gas]), self.disc.density[members&gas]*self.udens)
-		_, tempav = self.azAverage(np.sqrt(r2[members&gas]), temp[members&gas])
-		raddust, fdustav = self.azAverage(np.sqrt(r2[members&gas]), dustfrac[members&gas],nbins=20)
+                        #Calculate temperatures from thermal energies
+                        k = 1.38064852e-16    #ergs
+                        mH = 1.6735575e-24    #grams
+                        gmw = 2.381           #mean mass taken from Phantom
+                        N = sum(gas*d.disc.massofgas)*d.umass/mH/gmw #number of atoms
+                        temp = 2.*d.disc.utherm*d.uenerg/3./k/N
 
+			utime = d.utime/(60*60*24*365.25)
 
-		_, denspoly = self.fitPolytrope(radplot,densav)
-		_, temppoly = self.fitPolytrope(radplot,tempav)
-		raddust, fdustpoly = self.fitPolytrope(raddust,fdustav)
+			#create arrays of particle masses
+			mass = np.zeros(len(d.disc.xyzh[0,:]))
+			mass[d.disc.itype == 1] = d.disc.massofgas
+			mass[d.disc.itype == 2] = d.disc.massofdust
 
-		polyx, polytheta = Analyser.polytropicProfile(n=1.5)
+			clumpdata = zip(d.disc.xyzh[0,members], d.disc.xyzh[1,members], d.disc.xyzh[2,members], d.disc.xyzh[3,members], 
+					d.disc.density[members], mass[members], temp[members], dustfrac[members], d.disc.itype[members])
+			clumpdata = np.asarray(clumpdata)
+			header = ("time: %s utime (yrs^-1): %s \n x, y, z, h, density, mass, temp, " %(str(d.disc.time), str(utime)) +
+				  "dustfrac, itype \n %s, %s, %s, %s, %s, %s, 0.0, 0.0, 0.0 \n \n" %(str(d.udist), str(d.udist),
+				 								     str(d.udist), str(d.udist),
+												     str(d.udens), str(d.umass)))
+			np.savetxt('clumpfiles/clumpdata_%.0f.txt' %d.disc.time, clumpdata, header=header)
 
-		#Plot density vs. radius
-		plt.figure(1)
-		plt.scatter(np.sqrt(r2[members & gas]), self.disc.density[members & gas]*self.udens, s=0.1)
-		plt.plot(radplot, densav)
-		plt.plot(radplot, denspoly)
-		plt.ylim([0, max(self.disc.density[members&gas]*self.udens*1.1)])
-		plt.ylabel(r'$\rho$ (g cm$^{-3}$)')
-		plt.xlabel('Dist from clump centre (au)')
-		plt.title('%s : Gas density vs. radius' %self.file)
-		plt.legend(['%.1f' %self.disc.time])
+	@staticmethod
+	def plotDustFrac(discs,IDs):
+        	timelegend = []
+                for i, [d, ID] in enumerate(zip(discs,IDs)):
+                	clumpxyz = d.clumpcat[ID][:3]
+                        r2 = (d.disc.xyzh[0]-clumpxyz[0])**2 + (d.disc.xyzh[1]-clumpxyz[1])**2
+                        members = np.sqrt(r2) < d.annulus                       #members are all particles within radial annulus
+                        inner = np.sqrt(r2) < 0.25
 
-		#Plot temperature vs. radius
-		plt.figure(2)
-		plt.scatter(np.sqrt(r2[members & gas]), temp[members & gas], s=0.1)
-		plt.plot(radplot, tempav)
-		plt.plot(radplot, temppoly)
-		plt.ylim([0, max(temp[members&gas]*1.1)])
-		plt.ylabel('Temp (K)')
-		plt.xlabel('Dist from clump centre (au)')
-		plt.title('%s : Gas temp vs. radius' %self.file)
-		plt.legend(['%.1f' %self.disc.time])
+                        gas = d.disc.itype == 1
+                        dust = d.disc.itype == 2
+                        dustfrac = d.disc.dustfrac*1e8  #as I originally set dust-to-gas=1e-10
 
-		#Plot dust fraction vs. radius
-		plt.figure(3)
-		plt.scatter(np.sqrt(r2[members & gas]), dustfrac[members & gas], s=0.1)
-		plt.plot(raddust, fdustav)
-		plt.plot(raddust, fdustpoly)
-		plt.ylim([0, max(dustfrac[members&gas]*1.1)])
-		plt.ylabel('Dust-to-gas ratio')
-		plt.xlabel('Dist from clump centre (au)')
-		plt.title('%s : Dust fraction vs. radius' %self.file)
-		plt.legend(['%.1f' %self.disc.time])
+                        #Calculate temperatures from thermal energies
+                        k = 1.38064852e-16    #ergs
+                        mH = 1.6735575e-24    #grams
+                        gmw = 2.381           #mean mass taken from Phantom
+                        N = sum(gas*d.disc.massofgas)*d.umass/mH/gmw #number of atoms
+                        temp = 2.*d.disc.utherm*d.uenerg/3./k/N
 
-		plt.show()
+                        timelegend.append('%.2f yrs' %d.disc.time)
+			#Plot dust fraction vs. radius
+                        plt.figure(3)
+                        plt.scatter(np.sqrt(r2[members & gas]), dustfrac[members & gas], s=1.0,
+                                    c=temp[members & gas], cmap=cm.magma)
+                        plt.yscale('log')
+                        plt.ylim([0.001,1.5])
+                        plt.xlim([0,3.])
+                        plt.ylabel('Dust-to-gas ratio')
+                        plt.xlabel('Dist from clump centre (au)')
+                        plt.title('Dust fraction vs. radius')
+                        cbar = plt.colorbar()
+                        cbar.set_label('Temp (K)')
+			plt.clim([0,600])
+                        plt.legend(['%.2f yrs' %d.disc.time])
+			plt.savefig('/disk2/cadman/phantom_runs/dustyfragment/fragplots/5cmhires_dustfrac/%i.png' %(len(IDs)-i))
+			#plt.show()
+			plt.clf()
 
 	@staticmethod
 	def plotMultiClumps(discs,IDs):
@@ -164,6 +193,9 @@ class Analyser():
 		#Initially plot polytropic indices n=1.5 for all clumps
 		polyx, polytheta = Analyser.polytropicProfile(n=np.ones(len(IDs))*1.5)
 
+		#plot colors
+		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
 		keepplotting = True
 		while keepplotting:
 			timelegend = []
@@ -171,6 +203,7 @@ class Analyser():
 				clumpxyz = d.clumpcat[ID][:3]
 				r2 = (d.disc.xyzh[0]-clumpxyz[0])**2 + (d.disc.xyzh[1]-clumpxyz[1])**2
 				members = np.sqrt(r2) < d.annulus 			#members are all particles within radial annulus
+				inner = np.sqrt(r2) < 0.25
 
 				gas = d.disc.itype == 1
 				dust = d.disc.itype == 2
@@ -195,42 +228,45 @@ class Analyser():
 
 				#Plot density vs. radius
 				plt.figure(1)
-				plt.scatter(np.sqrt(r2[members & gas]), d.disc.density[members & gas]*d.udens, s=0.1)
-				plt.plot(polyx[i], max(d.disc.density[members&gas]*d.udens)*polytheta[i]**1.5) #plot polytropic profile
-				plt.ylim([1e-12, max(d.disc.density[members&gas]*d.udens*2)])
+				#plt.scatter(np.sqrt(r2[members & gas]), d.disc.density[members & gas]*d.udens, s=0.1)
+				plt.plot(radplot, densav,'-',c=colors[i], label=timelegend[i])
+				plt.plot(polyx[i], max(d.disc.density[members&gas&inner]*d.udens)*polytheta[i]**1.5,'--',c=colors[i]) #polytropic profile
+				plt.ylim([1e-13, max(d.disc.density[members&gas]*d.udens*2)])
 				plt.xlim([0,3.])
 				plt.ylabel(r'$\rho$ (g cm$^{-3}$)')
 				plt.xlabel('Dist from clump centre (au)')
 				plt.title('Gas density vs. radius')
 				plt.yscale('log')
-				plt.legend(timelegend)
+				plt.legend()
 
 				#Plot temperature vs. radius
 				plt.figure(2)
-				plt.scatter(np.sqrt(r2[members & gas]), temp[members & gas], s=0.1)
-				plt.plot(polyx[i], max(temp[members&gas])*polytheta[i]) #plot polytropic profile
+				#plt.scatter(np.sqrt(r2[members & gas]), temp[members & gas], s=0.1)
+				plt.plot(radplot, tempav, '-',c=colors[i], label=timelegend[i])
+				plt.plot(polyx[i], max(temp[members&gas&inner])*polytheta[i], '--', c=colors[i]) #polytropic profile
 				plt.ylim([10, max(temp[members&gas]*1.1)])
 				plt.xlim([0,3.])
 				plt.ylabel('Temp (K)')
 				plt.xlabel('Dist from clump centre (au)')
 				plt.yscale('log')
 				plt.title('Gas temp vs. radius')
-				plt.legend(timelegend)
-
-				'''
+				plt.legend()
+				
 				#Plot dust fraction vs. radius
 				plt.figure(3)
-				plt.scatter(np.sqrt(r2[members & gas]), dustfrac[members & gas], s=0.1)
-				plt.plot(raddust, fdustav)
-				#plt.plot(raddust, fdustpoly)
+				plt.scatter(np.sqrt(r2[members & gas]), dustfrac[members & gas], s=1.0, 
+					    c=temp[members & gas], cmap=cm.magma)
+				plt.plot(raddust, fdustav, '-', c=colors[i], label=timelegend[i])
 				plt.ylim([0, max(dustfrac[members&gas]*1.1)])
 				plt.xlim([0,3.])
 				plt.ylabel('Dust-to-gas ratio')
 				plt.xlabel('Dist from clump centre (au)')
 				#plt.yscale('log')
 				plt.title('Dust fraction vs. radius')
-				plt.legend(timelegend)
-				'''
+				cbar = plt.colorbar()
+				cbar.set_label('Temp (K)')
+				plt.legend()
+				
 			plt.show()
 			plt.clf()
 

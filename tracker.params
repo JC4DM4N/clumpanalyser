@@ -1,5 +1,5 @@
-/disk2/cadman/phantom_runs/dustyfragment/500cm_slow_2
-200
-2 6 5 13
-72.49
+/disk2/cadman/phantom_runs/dustyfragment/5cm_hires     #working directory
+182						       #final disc file
+14						       #fragment IDs in final clumpcat file
+72.49						       #dt
 

@@ -11,7 +11,7 @@ ii- The new clump has a COM in the location we expect it to be
 If the first two conditions are satisfied, we have located the clump in the previous
     dump and can keep moving backward.
 If a clump cannot be located in the previous (10) dumps to where it was last found, 
-    then this clump no longer exists and we have found its progenitor.
+    then this clump no longer exists and we have found its origin.
 """
 
 class Tracker(object):
@@ -107,8 +107,16 @@ class Tracker(object):
 
 	@staticmethod
 	def findClumpsinDump(disc_curr,disc_prev,ID,dt,step=1.):
-		'''
-		'''
+		"""
+		routine to find clump (ID) from disc_curr in disc_prev
+		Iterate through all the clumps in disc_prev, and compare members, positions and MBP to clump ID
+			in disc_curr.members[ID].
+		If the clump is found, append to prevID and make disc_curr=disc_prev and move on.
+		If the clump is not found in dump i-1, move onto i-2 and make step+=1. Do the same method to try and find the
+			clump again.
+		If step > 5, make requirements less strict and start comparing MBP.
+		If two potential clumps are identified in the previous dump then check which one is the most likely candidate.
+		"""
 		same = 0
 		found = False
 		prevID = []
@@ -163,19 +171,11 @@ class Tracker(object):
 		return prevID, found
 
 	@staticmethod
-	def readParams():
-		f = open('tracker.params','r')
-		params = f.read().splitlines()
-		datadir = params[0]						#working directory with all the disc files
-		final = int(params[1])					#final dump ID
-		ctrack = map(int, params[2].split())	#list of the clump IDs in final disc I wish to track
-		dt = float(params[3])					#timestep between disc dumps
-		return datadir, final, ctrack, dt
-
-	@staticmethod
 	def runTracker(params):
+		"""
+		Iterate through dump files, running findClumpsinDump method to identify desired clump in previous dump
+		"""
 		wd, final, ctrack, dt = params
-		#wd, final, ctrack, dt = Tracker.readParams()
 		#curr_disc = fdisc
 		track = {}
 		for i, ID in enumerate(ctrack):
@@ -183,11 +183,11 @@ class Tracker(object):
 			ogID = ID
 			track[ogID] = [idump,ID]
 			#go backward to dump 0, trying to find these members and positions in each dump
-			while idump > 0:
+			while idump > 2:
 				curr_disc = Tracker(idump,wd)
-				if idump-1==198 and ogID==5:
-					#this clump is causing problems, skip it
-					idump=198
+				#if idump-1==198 and ogID==5:
+				#	#this clump is causing problems, skip it
+				#	idump=198
 				prev_disc = Tracker(idump-1,wd)
 				found = False
 				prevID, found = Tracker.findClumpsinDump(curr_disc,prev_disc,ID,dt)
