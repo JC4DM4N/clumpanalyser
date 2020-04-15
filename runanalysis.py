@@ -4,7 +4,6 @@ from analyse import Analyser
 def readParams():
 	f = open('tracker.params','r')
 	params = f.read().splitlines()
-	import pdb; pdb.set_trace()
 	datadir = params[0].split('#')[0].split()[0]				#working directory with all the disc files
 	final = int(params[1].split('#')[0])					#final dump ID
 	ctrack = map(int, params[2].split('#',1)[0].split())			#list of the clump IDs in final disc I wish to track
@@ -31,7 +30,6 @@ tracks = Tracker.runTracker(params)
 
 wd = params[0]
 
-
 ###Create Analyser instances for each disc file
 
 discs=[]
@@ -40,11 +38,9 @@ iclumps=map(int, iclumps)
 for i, idump in enumerate(tracks[ctrack[0]]):
     discs.append(Analyser(idump[0],wd))
 
-
 ###Write clump particle data to text files...
 
 Analyser.writeClumpstoDumps(discs,iclumps)
-
 
 ###Plot dust fraction coloured by temperature...
 

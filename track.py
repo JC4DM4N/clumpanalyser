@@ -89,7 +89,8 @@ class Tracker(object):
 		"""
 		same = False
 		if step<=5:
-			if np.allclose(loc1 - vel1*dt*step, loc2, rtol=0.2+step/100.):
+			#check if x and y coordinates are in expected positions (don't require z pos)
+			if np.allclose(loc1[:2] - vel1[:2]*dt*step, loc2[:2], rtol=0.2+step/100.):
 				same = True
 		else:
 			#if we are getting desparate, only require x OR y co-ordincates match

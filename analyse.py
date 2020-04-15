@@ -20,7 +20,7 @@ class Analyser():
 		self.wd = wd									#directory where data is stored
 		self.disc = pa('%s/%s' %(self.wd,self.file))
 		self.readClumpcat()								#read in clump info from clumpcat file
-		self.readMembers()
+		#self.readMembers()
 		self.annulus = 3								#annulus in AU to analyse around clump centre
 
 		#define constants
@@ -171,14 +171,14 @@ class Analyser():
                         plt.scatter(np.sqrt(r2[members & gas]), dustfrac[members & gas], s=1.0,
                                     c=temp[members & gas], cmap=cm.magma)
                         plt.yscale('log')
-                        plt.ylim([0.001,1.5])
+                        plt.ylim([0.001,1.0])
                         plt.xlim([0,3.])
                         plt.ylabel('Dust-to-gas ratio')
                         plt.xlabel('Dist from clump centre (au)')
                         plt.title('Dust fraction vs. radius')
                         cbar = plt.colorbar()
                         cbar.set_label('Temp (K)')
-			plt.clim([0,600])
+			plt.clim([0,400])
                         plt.legend(['%.2f yrs' %d.disc.time])
 			plt.savefig('/disk2/cadman/phantom_runs/dustyfragment/fragplots/5cmhires_dustfrac/%i.png' %(len(IDs)-i))
 			#plt.show()
