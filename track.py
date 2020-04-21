@@ -176,7 +176,7 @@ class Tracker(object):
 		"""
 		Iterate through dump files, running findClumpsinDump method to identify desired clump in previous dump
 		"""
-		wd, final, ctrack, dt = params
+		wd, initial, final, ctrack, dt = params
 		#curr_disc = fdisc
 		track = {}
 		for i, ID in enumerate(ctrack):
@@ -184,7 +184,7 @@ class Tracker(object):
 			ogID = ID
 			track[ogID] = [idump,ID]
 			#go backward to dump 0, trying to find these members and positions in each dump
-			while idump > 2:
+			while idump >= initial:
 				curr_disc = Tracker(idump,wd)
 				#if idump-1==198 and ogID==5:
 				#	#this clump is causing problems, skip it
